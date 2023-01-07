@@ -2,7 +2,10 @@
 #include <vector>
 
 //A simple square Matrix class
-class Matrix : public std::vector< std::vector<float> > {
+class Matrix {
+ private:
+   std::vector< std::vector<float> > theMatrix;
+
  public:
    typedef std::vector<float> Row;
    Matrix(size_t size, bool invert = false);
