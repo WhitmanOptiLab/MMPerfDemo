@@ -1,4 +1,4 @@
-#include "matrix.hpp"
+#pragma once
 #include <cstdlib>
 
 Matrix::Matrix(size_t size, bool invert) {

@@ -10,3 +10,4 @@ class Matrix : public std::vector< std::vector<float> > {
    const Row& operator[](size_t i) const;
 };
 
+#include "matrix.cpp"
