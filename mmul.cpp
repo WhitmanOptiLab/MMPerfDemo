@@ -11,7 +11,7 @@ void MultiplyMatrices(const MatrixRef a, const MatrixRef b, MatrixRef c) {
   for (size_t i = 0; i < SIZE; i++) {
     for (size_t j = 0; j < SIZE; j++) {
       for (size_t k = 0; k < SIZE; k++) {
-        c[i][j] += a[i][k] * b[j][k];
+        c[i][j] += a[i][k] * b[k][j];
       }
     }
   }
