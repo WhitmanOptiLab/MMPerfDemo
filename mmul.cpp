@@ -22,7 +22,7 @@ void MultiplyMatrices(const MatrixRef a, const MatrixRef b, MatrixRef c) {
             }
             float vals[4];
             *((float4*)vals) = sum;
-            c[i][j] = vals[0] + vals[1] + vals[2] + vals[3];
+            c[i][j] += vals[0] + vals[1] + vals[2] + vals[3];
           }
         }
       }
