@@ -11,6 +11,7 @@ typedef float float4 __attribute__ ((vector_size(16)));
 typedef Matrix& MatrixRef;
 
 void MultiplyMatrices(const MatrixRef a, const MatrixRef b, MatrixRef c) {
+#pragma omp parallel for
   for (size_t i_out = 0; i_out < SIZE; i_out+=TILE) {
     for (size_t j_out = 0; j_out < SIZE; j_out+=TILE) {
       for (size_t k_out = 0; k_out < SIZE; k_out+=TILE) {
