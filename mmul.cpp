@@ -7,6 +7,7 @@ using namespace std;
 const size_t SIZE = 1024;
 const size_t TILE = 16;
 
+typedef float float4 __attribute__ ((vector_size(16)));
 typedef Matrix& MatrixRef;
 
 void MultiplyMatrices(const MatrixRef a, const MatrixRef b, MatrixRef c) {
@@ -15,9 +16,13 @@ void MultiplyMatrices(const MatrixRef a, const MatrixRef b, MatrixRef c) {
       for (size_t k_out = 0; k_out < SIZE; k_out+=TILE) {
         for (size_t i = i_out; i < i_out+TILE; i++) {
           for (size_t j = j_out; j < j_out+TILE; j++) {
-            for (size_t k = k_out; k < k_out+TILE; k++) {
-              c[i][j] += a[i][k] * b[j][k];
+            float4 sum = {0.0f, 0.0f, 0.0f, 0.0f};
+            for (size_t k = k_out; k < k_out+TILE; k+=4) {
+              sum += *((float4*)&a[i][k]) * *((float4*)&b[j][k]);
             }
+            float vals[4];
+            *((float4*)vals) = sum;
+            c[i][j] = vals[0] + vals[1] + vals[2] + vals[3];
           }
         }
       }
