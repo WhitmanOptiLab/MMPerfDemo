@@ -28,9 +28,9 @@ __kernel void mmul(global float* A, global float* B, global float* C, size_t SIZ
   int j = get_global_id(0);\
   float sum = 0.0f;\
   for (int k = 0; k < SIZE; k++) {\
-    sum += a[i*SIZE+k] * b[k*SIZE + j];\
+    sum += A[i*SIZE+k] * B[k*SIZE + j];\
   }\
-  c[i*SIZE+j] += sum;\
+  C[i*SIZE+j] += sum;\
   return;\
 }\
 ";
@@ -39,6 +39,8 @@ void MultiplyMatrices_ocl(const MatrixRef a, const MatrixRef b, MatrixRef c) {
   std::vector<cl::Platform> platforms;
   cl::Platform::get(&platforms);
   if (platforms.empty()) {
+    std::cerr << "\nNo OpenCL Platforms found";
+    exit(1);
   }
 
   cl::Platform platform = platforms[0]; //Pick platform 0 as default
@@ -54,8 +56,15 @@ void MultiplyMatrices_ocl(const MatrixRef a, const MatrixRef b, MatrixRef c) {
   cl::Context context({device});
 
   cl::Program::Sources sources;
+  sources.push_back({MMProgramString.c_str(), MMProgramString.length()+1});
   cl::Program program(context, sources);
-  program.build({device});
+  cl_int buildstatus = program.build({device});
+
+  if (buildstatus != CL_SUCCESS) {
+    std::cerr << "\nError building appliction: " 
+      << program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device) << std::endl;
+  }
+
   cl::Buffer deviceA(context, CL_MEM_READ_ONLY, sizeof(float)*N);
   cl::Buffer deviceB(context, CL_MEM_READ_ONLY, sizeof(float)*N);
   cl::Buffer deviceC(context, CL_MEM_READ_WRITE, sizeof(float)*N);
@@ -96,7 +105,7 @@ int main() {
 
   gettimeofday(&start, NULL);
 
-  MultiplyMatrices_ocl(a, b, c);
+  MultiplyMatrices_cpu(a, b, c);
 
   gettimeofday(&end, NULL);
 
