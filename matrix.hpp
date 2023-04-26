@@ -15,3 +15,4 @@ class Matrix {
    ConstRow operator[](size_t i) const;
 };
 
+#include "matrix.cpp"

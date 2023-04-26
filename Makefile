@@ -5,11 +5,11 @@ Makefile:
 perftest: mmul
 	./mmul
 
-mmul: mmul.o matrix.o
+mmul: mmul.o
 	g++ $^ -o $@ -lOpenCL
 
 %.o : %.cpp matrix.hpp Makefile
-	g++ -c -o $@ $< -fno-tree-loop-vectorize
+	g++ -c -o $@ $< -O3 -fno-tree-loop-vectorize
 
 .PHONY: clean
 clean:
