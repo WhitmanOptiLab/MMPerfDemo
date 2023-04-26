@@ -30,7 +30,7 @@ __kernel void mmul(global float* A, global float* B, global float* C, size_t SIZ
   for (int k = 0; k < SIZE; k++) {\
     sum += a[i*SIZE+k] * b[k*SIZE + j];\
   }\
-  c[i*SIZE+j] = sum;\
+  c[i*SIZE+j] += sum;\
   return;\
 }\
 ";
