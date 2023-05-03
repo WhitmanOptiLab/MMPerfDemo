@@ -47,13 +47,17 @@ void MultiplyMatrices_cpu(const MatrixRef a, const MatrixRef b, MatrixRef c) {
 
 const std::string MMProgramString = "\
 __kernel void mmul(global float* A, global float* B, global float* C, size_t SIZE) {\
-  int i = get_global_id(1);\
+  int i = get_global_id(1)*2;\
   int j_start = get_global_id(0)*4;\
-  float4 sum = {0.0f, 0.0f, 0.0f, 0.0f};\
+  float4 sum0 = {0.0f, 0.0f, 0.0f, 0.0f};\
+  float4 sum1 = {0.0f, 0.0f, 0.0f, 0.0f};\
   for (int k = 0; k < SIZE; k++) {\
-    sum += A[i*SIZE+k] * (*(global float4*) &B[k*SIZE + j_start]);\
+    float4 Bvec = (*(global float4*) &B[k*SIZE + j_start]);\
+    sum0 += A[i*SIZE+k] * Bvec;\
+    sum1 += A[(i+1)*SIZE+k] * Bvec;\
   }\
-  (*(global float4*) & C[i*SIZE+j_start]) += sum;\
+  (*(global float4*) & C[i*SIZE+j_start]) += sum0;\
+  (*(global float4*) & C[(i+1)*SIZE+j_start]) += sum1;\
   return;\
 }\
 ";
@@ -106,9 +110,6 @@ void MultiplyMatrices_ocl(const MatrixRef a, const MatrixRef b, MatrixRef c) {
     }
   }
 
-  struct timeval start, end;
-
-  gettimeofday(&start, NULL);
   //Last possible place
   cl::Kernel mmul_kernel(program, "mmul");
   mmul_kernel.setArg(0, deviceA);
@@ -117,8 +118,15 @@ void MultiplyMatrices_ocl(const MatrixRef a, const MatrixRef b, MatrixRef c) {
   mmul_kernel.setArg(3, SIZE);
 
   cl::Event kernel_finished;
-  queue.enqueueNDRangeKernel(mmul_kernel, cl::NullRange, cl::NDRange(SIZE/4, SIZE), cl::NullRange, nullptr, &kernel_finished);
+  queue.enqueueNDRangeKernel(mmul_kernel, cl::NullRange, cl::NDRange(SIZE/4, SIZE/2), cl::NullRange, nullptr, &kernel_finished);
+  queue.finish();
 
+  struct timeval start, end;
+
+  gettimeofday(&start, NULL);
+  for (int i = 0; i< 10; i++) {
+    queue.enqueueNDRangeKernel(mmul_kernel, cl::NullRange, cl::NDRange(SIZE/4, SIZE/2), cl::NullRange, nullptr, &kernel_finished);
+  }
   queue.finish();
   gettimeofday(&end, NULL);
 
@@ -132,7 +140,7 @@ void MultiplyMatrices_ocl(const MatrixRef a, const MatrixRef b, MatrixRef c) {
 
   double elapsedtime_sec = double(end.tv_sec - start.tv_sec) + 
                              double(end.tv_usec - start.tv_usec)/1000000.0;
-  cout << std::endl << "\nGPU Multiplication time (N=" << SIZE << "): " << elapsedtime_sec << std::endl;
+  cout << std::endl << "\nGPU Multiplication time (N=" << SIZE << "): " << elapsedtime_sec / 10 << std::endl;
   cl_int status = 0;
   kernel_finished.getInfo(CL_EVENT_COMMAND_EXECUTION_STATUS, &status);
   if (status != CL_COMPLETE) {
