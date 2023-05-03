@@ -22,15 +22,38 @@ void MultiplyMatrices_cpu(const MatrixRef a, const MatrixRef b, MatrixRef c) {
   }
 }
 
+
+//SIMT top locality priority is the j index (thread id lowest dimension)
+//J (TID0)
+//  A: Reuse of a single data item across adjacent threads (temporal locality)
+//  B: Adjacent threads access adjacent memory locations (spatial locality)
+//K (Loop inside each thread)
+//  A: Consecutive iterations access consecutive elements of A (spatial locality)
+//  B: Consecutive iterations access consecutive rows of B (poor locality)
+//I (TID1)
+//  A: Accesses all rows of A (poor locality, doesn't matter)
+//  B: Reusing the B matrix (temporal locality, doesn't matter)
+
+
+//Microthreads - each thread executes independently, but will swap out 
+//  on cache miss or other blocking operation
+//
+//Even assuming threads execute multiple instruction until a stall, 
+// each thread will probably hit a stall on every iteration for a miss in the 
+// B matrix.
+//J (TID0)
+//K 
+//I
+
 const std::string MMProgramString = "\
 __kernel void mmul(global float* A, global float* B, global float* C, size_t SIZE) {\
   int i = get_global_id(1);\
-  int j = get_global_id(0);\
-  float sum = 0.0f;\
+  int j_start = get_global_id(0)*4;\
+  float4 sum = {0.0f, 0.0f, 0.0f, 0.0f};\
   for (int k = 0; k < SIZE; k++) {\
-    sum += A[i*SIZE+k] * B[k*SIZE + j];\
+    sum += A[i*SIZE+k] * (*(global float4*) &B[k*SIZE + j_start]);\
   }\
-  C[i*SIZE+j] += sum;\
+  (*(global float4*) & C[i*SIZE+j_start]) += sum;\
   return;\
 }\
 ";
@@ -64,17 +87,29 @@ void MultiplyMatrices_ocl(const MatrixRef a, const MatrixRef b, MatrixRef c) {
     std::cerr << "\nError building appliction: " 
       << program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device) << std::endl;
   }
-
-  cl::Buffer deviceA(context, CL_MEM_READ_ONLY, sizeof(float)*N);
-  cl::Buffer deviceB(context, CL_MEM_READ_ONLY, sizeof(float)*N);
-  cl::Buffer deviceC(context, CL_MEM_READ_WRITE, sizeof(float)*N);
-
   cl::CommandQueue queue(context, device);
 
-  queue.enqueueWriteBuffer(deviceA, CL_TRUE, 0, sizeof(float)*N, a[0]);
-  queue.enqueueWriteBuffer(deviceB, CL_TRUE, 0, sizeof(float)*N, b[0]);
-  queue.enqueueWriteBuffer(deviceC, CL_TRUE, 0, sizeof(float)*N, c[0]);
+  //Option 3
 
+  cl::Buffer deviceA(context, CL_MEM_ALLOC_HOST_PTR, sizeof(float)*N);
+  cl::Buffer deviceB(context, CL_MEM_ALLOC_HOST_PTR, sizeof(float)*N);
+  cl::Buffer deviceC(context, CL_MEM_ALLOC_HOST_PTR, sizeof(float)*N);
+
+  float* hostA = (float*) queue.enqueueMapBuffer(deviceA, CL_TRUE, {CL_MAP_WRITE}, 0, sizeof(float)*N);
+  float* hostB = (float*) queue.enqueueMapBuffer(deviceB, CL_TRUE, {CL_MAP_WRITE}, 0, sizeof(float)*N);
+  float* hostC = (float*) queue.enqueueMapBuffer(deviceC, CL_TRUE, {CL_MAP_WRITE}, 0, sizeof(float)*N);
+  for (int i = 0; i < SIZE; i++) {
+    for (int j = 0; j < SIZE; j++) {
+      hostA[i*SIZE + j] = a[i][j];
+      hostB[i*SIZE + j] = b[i][j];
+      hostC[i*SIZE + j] = c[i][j];
+    }
+  }
+
+  struct timeval start, end;
+
+  gettimeofday(&start, NULL);
+  //Last possible place
   cl::Kernel mmul_kernel(program, "mmul");
   mmul_kernel.setArg(0, deviceA);
   mmul_kernel.setArg(1, deviceB);
@@ -82,10 +117,22 @@ void MultiplyMatrices_ocl(const MatrixRef a, const MatrixRef b, MatrixRef c) {
   mmul_kernel.setArg(3, SIZE);
 
   cl::Event kernel_finished;
-  queue.enqueueNDRangeKernel(mmul_kernel, cl::NullRange, cl::NDRange(SIZE, SIZE), cl::NullRange, nullptr, &kernel_finished);
+  queue.enqueueNDRangeKernel(mmul_kernel, cl::NullRange, cl::NDRange(SIZE/4, SIZE), cl::NullRange, nullptr, &kernel_finished);
 
-  queue.enqueueReadBuffer(deviceC, CL_TRUE, 0, sizeof(float)*N, c[0]);
   queue.finish();
+  gettimeofday(&end, NULL);
+
+  for (int i = 0; i < SIZE; i++) {
+    for (int j = 0; j < SIZE; j++) {
+      a[i][j] = hostA[i*SIZE + j];
+      b[i][j] = hostB[i*SIZE + j];
+      c[i][j] = hostC[i*SIZE + j];
+    }
+  }
+
+  double elapsedtime_sec = double(end.tv_sec - start.tv_sec) + 
+                             double(end.tv_usec - start.tv_usec)/1000000.0;
+  cout << std::endl << "\nGPU Multiplication time (N=" << SIZE << "): " << elapsedtime_sec << std::endl;
   cl_int status = 0;
   kernel_finished.getInfo(CL_EVENT_COMMAND_EXECUTION_STATUS, &status);
   if (status != CL_COMPLETE) {
@@ -105,7 +152,7 @@ int main() {
 
   gettimeofday(&start, NULL);
 
-  MultiplyMatrices_cpu(a, b, c);
+  MultiplyMatrices_ocl(a, b, c);
 
   gettimeofday(&end, NULL);
 
